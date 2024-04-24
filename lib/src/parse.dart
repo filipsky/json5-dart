@@ -20,6 +20,7 @@ Object? parse(String text, reviver) {
   pos = 0;
   line = 1;
   column = 0;
+  whitespace = '';
   // token = null;
   key = null;
   root = null;
@@ -49,6 +50,7 @@ List<Token?> split(String text) {
   pos = 0;
   line = 1;
   column = 0;
+  whitespace = '';
   // token = null;
   key = null;
   root = null;
@@ -59,7 +61,12 @@ List<Token?> split(String text) {
     if (token.type == 'eof') {
       return ret;
     } else {
+      if (whitespace?.isNotEmpty ?? false) {
+        ret.add(newToken('whitespace', whitespace));
+        whitespace = '';
+      }
       ret.add(token);
+      parseStates[parseState!]!();
     }
   }
 }
@@ -82,6 +89,7 @@ dynamic internalize(holder, name, reviver) {
 
 String? lexState;
 String? buffer;
+String? whitespace;
 late bool doubleQuote;
 late int sign;
 String? c;
@@ -95,7 +103,6 @@ Token lex() {
 
   for (;;) {
     c = peek();
-
     // This code is unreachable.
     // if (!lexStates[lexState]) {
     //     throw invalidLexState(lexState)
@@ -145,11 +152,11 @@ Map<String, Token? Function()> lexStates = {
       case '\r':
       case '\u2028':
       case '\u2029':
-        read();
+        whitespace = whitespace! + read()!;
         return null; //$
 
       case '/':
-        read();
+        buffer = read()!;
         lexState = 'comment';
         return null; //$
 
@@ -161,7 +168,7 @@ Map<String, Token? Function()> lexStates = {
     }
 
     if (util.isSpaceSeparator(c)) {
-      read();
+      whitespace = whitespace! + read()!;
       return null; //$
     }
 
@@ -175,12 +182,12 @@ Map<String, Token? Function()> lexStates = {
   'comment': () {
     switch (c) {
       case '*':
-        read();
+        buffer = buffer! + read()!;
         lexState = 'multiLineComment';
         return null; //$
 
       case '/':
-        read();
+        buffer = buffer! + read()!;
         lexState = 'singleLineComment';
         return null; //$
     }
@@ -190,7 +197,7 @@ Map<String, Token? Function()> lexStates = {
   'multiLineComment': () {
     switch (c) {
       case '*':
-        read();
+        buffer = buffer! + read()!;
         lexState = 'multiLineCommentAsterisk';
         return null; //$
 
@@ -200,19 +207,19 @@ Map<String, Token? Function()> lexStates = {
         }
     }
 
-    read();
+    buffer = buffer! + read()!;
     return null;
   },
   'multiLineCommentAsterisk': () {
     switch (c) {
       case '*':
         read();
-        return;
+        return null;
 
       case '/':
-        read();
+        buffer = buffer! + read()!;
         lexState = 'default';
-        return null; //$
+        return newToken('multiLineComment', buffer); //$
 
       default:
         if (c == null) {
@@ -220,7 +227,7 @@ Map<String, Token? Function()> lexStates = {
         }
     }
 
-    read();
+    buffer = buffer! + read()!;
     lexState = 'multiLineComment';
     return null;
   },
@@ -230,9 +237,9 @@ Map<String, Token? Function()> lexStates = {
       case '\r':
       case '\u2028':
       case '\u2029':
-        read();
+        buffer = buffer! + read()!;
         lexState = 'default';
-        return null; //$
+        return newToken('singleLineComment', buffer); //$
 
       default:
         if (c == null) {
@@ -241,7 +248,7 @@ Map<String, Token? Function()> lexStates = {
         }
     }
 
-    read();
+    buffer = buffer! + read()!;
     return null;
   },
   'value': () {
@@ -573,7 +580,7 @@ Map<String, Token? Function()> lexStates = {
       case '"':
         if (doubleQuote) {
           read();
-          return newToken('string', buffer);
+          return newToken('string', buffer, doubleQuote: doubleQuote);
         }
 
         buffer = buffer! + read()!;
@@ -582,7 +589,7 @@ Map<String, Token? Function()> lexStates = {
       case "'":
         if (!doubleQuote) {
           read();
-          return newToken('string', buffer);
+          return newToken('string', buffer, doubleQuote: doubleQuote);
         }
 
         buffer = buffer! + read()!;
@@ -699,8 +706,8 @@ Map<String, Token? Function()> lexStates = {
   },
 };
 
-Token newToken(String type, Object? value) {
-  return Token(type, value, line, column);
+Token newToken(String type, Object? value, {bool doubleQuote = false}) {
+  return Token(type, value, line, column, doubleQuote: doubleQuote);
 }
 
 void literal(String s) {
@@ -1032,8 +1039,7 @@ SyntaxException invalidChar(c) {
     return syntaxError('JSON5: invalid end of input at $line:$column');
   }
 
-  return syntaxError(
-      "JSON5: invalid character '${formatChar(c)}' at $line:$column");
+  return syntaxError("JSON5: invalid character '${formatChar(c)}' at $line:$column");
 }
 
 SyntaxException invalidEOF() {
@@ -1057,8 +1063,7 @@ SyntaxException invalidIdentifier() {
 
 void separatorChar(c) {
   // FIXME: how to print error
-  print(
-      "JSON5: '${formatChar(c)}' in strings is not valid ECMAScript; consider escaping");
+  print("JSON5: '${formatChar(c)}' in strings is not valid ECMAScript; consider escaping");
 }
 
 String? formatChar(String? c) {

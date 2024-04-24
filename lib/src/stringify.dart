@@ -32,6 +32,51 @@ class _Stringify {
     return serializeProperty('', {'': value});
   }
 
+  String serializeProperty(dynamic key, dynamic holder) {
+    Object? value = holder[key];
+
+    String? serializedValue(value) {
+      if (value == null) return 'null';
+      switch (value) {
+        case true:
+          return 'true';
+        case false:
+          return 'false';
+      }
+
+      if (value is String) {
+        return quoteString(value); // , false?
+      }
+
+      if (value is num) {
+        return value.toString();
+      }
+
+      if (value is List) return serializeArray(value);
+      if (value is Map) return serializeObject(value);
+
+      if (value is Iterable) return serializeArray(value.toList());
+
+      return null;
+    }
+
+    var result = serializedValue(value);
+    if (result != null) {
+      return result;
+    }
+
+    if (toEncodable != null) {
+      value = toEncodable!(value);
+    }
+
+    result = serializedValue(value);
+    if (result != null) {
+      return result;
+    }
+
+    throw Exception('Cannot stringify $value'); // undefined
+  }
+
   String quoteString(String value) {
     final quotes = <String, dynamic>{
       "'": 0.1,
@@ -85,59 +130,12 @@ class _Stringify {
       product += c;
     }
 
-    final quoteChar = quote ??
-        quotes.keys.reduce((a, b) => (quotes[a]! < quotes[b]!) ? a : b);
+    final quoteChar = quote ?? quotes.keys.reduce((a, b) => (quotes[a]! < quotes[b]!) ? a : b);
 
     // FIXME replaceall + doall?
-    product = product.replaceAll(
-        RegExp(quoteChar, dotAll: true), replacements[quoteChar]!);
+    product = product.replaceAll(RegExp(quoteChar, dotAll: true), replacements[quoteChar]!);
 
     return quoteChar + product + quoteChar;
-  }
-
-  String serializeProperty(dynamic key, dynamic holder) {
-    Object? value = holder[key];
-
-    String? serializedValue(value) {
-      if (value == null) return 'null';
-      switch (value) {
-        case true:
-          return 'true';
-        case false:
-          return 'false';
-      }
-
-      if (value is String) {
-        return quoteString(value); // , false?
-      }
-
-      if (value is num) {
-        return value.toString();
-      }
-
-      if (value is List) return serializeArray(value);
-      if (value is Map) return serializeObject(value);
-
-      if (value is Iterable) return serializeArray(value.toList());
-
-      return null;
-    }
-
-    var result = serializedValue(value);
-    if (result != null) {
-      return result;
-    }
-
-    if (toEncodable != null) {
-      value = toEncodable!(value);
-    }
-
-    result = serializedValue(value);
-    if (result != null) {
-      return result;
-    }
-
-    throw Exception('Cannot stringify $value'); // undefined
   }
 
   String? serializeKey(String key) {
@@ -245,4 +243,10 @@ String stringify(
   Object? Function(Object? nonEncodable)? toEncodable,
 ) {
   return _Stringify().eval(value, replacer, space, toEncodable);
+}
+
+String quoteString(String value, {String? preferredQuote = null}) {
+  final stringifier = _Stringify();
+  stringifier.quote = preferredQuote;
+  return stringifier.quoteString(value);
 }

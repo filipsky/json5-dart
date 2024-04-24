@@ -3,7 +3,8 @@ class Token {
   final Object? value;
   final int? line;
   final int? column;
-  Token(this.type, this.value, this.line, this.column);
+  final bool doubleQuote;
+  Token(this.type, this.value, this.line, this.column, {this.doubleQuote = false});
 
   @override
   String toString() => '[$type: $value]';

@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'src/parse.dart' as parser;
 import 'src/stringify.dart' as render;
+import 'src/patch.dart' as patcher;
 
 Object? _toEncodable(dynamic nonEncodable) {
   if (nonEncodable == null) return null;
@@ -49,6 +50,16 @@ abstract class JSON5 {
   /// The altenative is [json5Decode(string)]
   static dynamic parse(String string) {
     return parser.parse(string, null);
+  }
+
+  /// Parses the string, modifies with values found in newValues and returns the string with comments and formatting intact.
+  ///
+  /// If the input string is not [json] or [json5], an
+  /// [SyntaxException] will be thrown.
+  ///
+  /// The altenative is [json5Patch(string, newValues)]
+  static String patch(String string, dynamic newValues) {
+    return patcher.patch(string, newValues);
   }
 }
 
