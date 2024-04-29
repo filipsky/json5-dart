@@ -1,5 +1,7 @@
 import 'dart:convert';
 
+import 'package:json5/json5.dart';
+
 import 'parse.dart' as parser;
 import 'stringify.dart' as render;
 
@@ -128,6 +130,15 @@ String patch(String string, dynamic newValues) {
       buffer += tokenStr;
     }
   }
+
+  assert(() {
+    try {
+      JSON5.parse(buffer);
+      return true;
+    } catch (e) {
+      throw Exception('Error patching JSON string, the result is not valid: $e');
+    }
+  }());
 
   return buffer;
 }
