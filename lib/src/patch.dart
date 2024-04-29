@@ -18,38 +18,42 @@ class _StackMember {
   String toString() => "$propertyName: $valueType";
 }
 
-String patch(String string, dynamic newValues) {
-  final tokens = parser.split(string);
+String patch(String jsonStr, dynamic newValues) {
+  final tokens = parser.split(jsonStr);
 
-  var buffer = '';
-  var stack = <_StackMember>[];
-  var lastString = 'root';
+  var outputBuffer = '';
+  var propertyStack = <_StackMember>[];
+  var lastStringValue = 'root';
   var patchList = _buildPatchList(newValues);
 
+  if (patchList.isEmpty) {
+    return jsonStr;
+  }
+
   void push(String propertyName, String valueType) {
-    stack.add(_StackMember(propertyName: propertyName, valueType: valueType));
+    propertyStack.add(_StackMember(propertyName: propertyName, valueType: valueType));
 
     if (valueType == 'property') {
-      final currentId = stack.skip(1).map((e) => e.propertyName).join('.');
+      final currentId = propertyStack.skip(1).map((e) => e.propertyName).join('.');
       final repl = patchList[currentId];
       if (repl != null) {
-        stack.last.shouldReplace = true;
+        propertyStack.last.shouldReplace = true;
       }
     }
   }
 
   void pop() {
-    String currentId = stack.skip(1).map((e) => e.propertyName).join('.');
+    String currentId = propertyStack.skip(1).map((e) => e.propertyName).join('.');
 
-    if (stack.lastOrNull?.shouldReplace == true) {
+    if (propertyStack.lastOrNull?.shouldReplace == true) {
       final replacement = patchList[currentId];
       patchList.remove(currentId);
 
-      buffer += replacement ?? '';
+      outputBuffer += replacement ?? '';
     }
 
-    bool addComma = !(stack.lastOrNull?.hasCommaAfter ?? false);
-    stack.removeLast();
+    bool addComma = !(propertyStack.lastOrNull?.hasCommaAfter ?? false);
+    propertyStack.removeLast();
 
     final patches = patchList.entries
         .where((k) => k.key.startsWith(currentId))
@@ -58,7 +62,7 @@ String patch(String string, dynamic newValues) {
 
     if (patches.isNotEmpty) {
       var data = _stringifyPatches(_mergePatches(patches));
-      buffer += '${addComma ? ', ' : ''}$data\n';
+      outputBuffer += '${addComma ? ', ' : ''}$data\n';
 
       for (var key in patches.map((kvp) => kvp.key)) {
         patchList.remove('${currentId.isEmpty ? '' : currentId + '.'}$key');
@@ -67,11 +71,11 @@ String patch(String string, dynamic newValues) {
   }
 
   void changeType(String valueType) {
-    stack.lastOrNull?.valueType = valueType;
+    propertyStack.lastOrNull?.valueType = valueType;
   }
 
   bool isReplacing() {
-    return stack.where((e) => e.shouldReplace).isNotEmpty;
+    return propertyStack.where((e) => e.shouldReplace).isNotEmpty;
   }
 
   Token? lastToken = null;
@@ -90,33 +94,33 @@ String patch(String string, dynamic newValues) {
 
       case "identifier":
       case "string":
-        lastString = tokenStr;
+        lastStringValue = tokenStr;
         tokenStr = render.quoteString(tokenStr, preferredQuote: token.doubleQuote ? '"' : ":");
         break;
 
       case "punctuator":
         switch (tokenStr) {
           case "{":
-            if (stack.isNotEmpty && stack.last.propertyName == lastString && stack.last.valueType == 'property') {
+            if (propertyStack.isNotEmpty && propertyStack.last.propertyName == lastStringValue && propertyStack.last.valueType == 'property') {
               changeType('object');
             } else {
-              push(lastString, 'object');
+              push(lastStringValue, 'object');
             }
             break;
           case "[":
-            if (stack.isNotEmpty && stack.last.propertyName == lastString && stack.last.valueType == 'property') {
+            if (propertyStack.isNotEmpty && propertyStack.last.propertyName == lastStringValue && propertyStack.last.valueType == 'property') {
               changeType('array');
             } else {
-              push(lastString, 'array');
+              push(lastStringValue, 'array');
             }
             break;
           case ":":
-            push(lastString, 'property');
+            push(lastStringValue, 'property');
             break;
           case "}":
           case "]":
-            if (stack.isNotEmpty) {
-              if (stack.last.valueType == 'property') {
+            if (propertyStack.isNotEmpty) {
+              if (propertyStack.last.valueType == 'property') {
                 pop();
                 replacing = isReplacing();
               }
@@ -124,8 +128,8 @@ String patch(String string, dynamic newValues) {
             }
             break;
           case ",":
-            stack.last.hasCommaAfter = true;
-            if (stack.last.valueType == 'property') {
+            propertyStack.last.hasCommaAfter = true;
+            if (propertyStack.last.valueType == 'property') {
               pop();
               replacing = isReplacing();
             }
@@ -138,7 +142,7 @@ String patch(String string, dynamic newValues) {
     }
 
     if (!replacing) {
-      buffer += tokenStr;
+      outputBuffer += tokenStr;
     }
 
     lastToken = token;
@@ -146,14 +150,14 @@ String patch(String string, dynamic newValues) {
 
   assert(() {
     try {
-      JSON5.parse(buffer);
+      JSON5.parse(outputBuffer);
       return true;
     } catch (e) {
       throw Exception('Error patching JSON string, the result is not valid: $e');
     }
   }());
 
-  return buffer;
+  return outputBuffer;
 }
 
 Map<String, String> _buildPatchList(dynamic newValues) {
