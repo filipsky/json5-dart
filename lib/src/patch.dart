@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:json5/json5.dart';
+import 'package:json5/src/token.dart';
 
 import 'parse.dart' as parser;
 import 'stringify.dart' as render;
@@ -54,6 +55,7 @@ String patch(String string, dynamic newValues) {
         .where((k) => k.key.startsWith(currentId))
         .map((e) => MapEntry(e.key.substring(currentId.isEmpty ? 0 : currentId.length + 1), e.value))
         .toList();
+
     if (patches.isNotEmpty) {
       var data = _stringifyPatches(_mergePatches(patches));
       buffer += '${addComma ? ', ' : ''}$data\n';
@@ -72,17 +74,26 @@ String patch(String string, dynamic newValues) {
     return stack.where((e) => e.shouldReplace).isNotEmpty;
   }
 
+  Token? lastToken = null;
+
   for (var token in tokens) {
     String tokenStr = (token!.value?.toString() ?? (token.type == 'null' ? 'null' : ''));
 
-    bool ignore = isReplacing();
+    bool replacing = isReplacing();
 
     switch (token.type) {
+      case "whitespace":
+        if (replacing && lastToken?.type == "punctuator" && lastToken!.value == ":") {
+          replacing = false;
+        }
+        break;
+
       case "identifier":
       case "string":
         lastString = tokenStr;
         tokenStr = render.quoteString(tokenStr, preferredQuote: token.doubleQuote ? '"' : ":");
         break;
+
       case "punctuator":
         switch (tokenStr) {
           case "{":
@@ -94,7 +105,7 @@ String patch(String string, dynamic newValues) {
             break;
           case "[":
             if (stack.isNotEmpty && stack.last.propertyName == lastString && stack.last.valueType == 'property') {
-              changeType('object');
+              changeType('array');
             } else {
               push(lastString, 'array');
             }
@@ -107,7 +118,7 @@ String patch(String string, dynamic newValues) {
             if (stack.isNotEmpty) {
               if (stack.last.valueType == 'property') {
                 pop();
-                ignore = isReplacing();
+                replacing = isReplacing();
               }
               pop();
             }
@@ -116,7 +127,7 @@ String patch(String string, dynamic newValues) {
             stack.last.hasCommaAfter = true;
             if (stack.last.valueType == 'property') {
               pop();
-              ignore = isReplacing();
+              replacing = isReplacing();
             }
             break;
         }
@@ -126,9 +137,11 @@ String patch(String string, dynamic newValues) {
         break;
     }
 
-    if (!ignore) {
+    if (!replacing) {
       buffer += tokenStr;
     }
+
+    lastToken = token;
   }
 
   assert(() {
