@@ -22,7 +22,7 @@ class _StackMember {
 }
 
 String patch(String jsonStr, dynamic newValues) {
-  final tokens = parser.split(jsonStr);
+  final tokens = parser.split(jsonStr, excludeCommentsAndWhitespace: false);
 
   var outputBuffer = '';
   var propertyStack = <_StackMember>[];

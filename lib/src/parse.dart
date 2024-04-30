@@ -43,7 +43,7 @@ Object? parse(String text, reviver) {
   return root;
 }
 
-List<Token?> split(String text) {
+List<Token?> split(String text, {bool excludeCommentsAndWhitespace = true}) {
   source = text;
   parseState = 'start';
   stack = [];
@@ -57,11 +57,11 @@ List<Token?> split(String text) {
 
   var ret = <Token?>[];
   for (;;) {
-    token = lex();
+    token = lex(excludeCommentsAndWhitespace: excludeCommentsAndWhitespace);
     if (token.type == 'eof') {
       return ret;
     } else {
-      if (whitespace?.isNotEmpty ?? false) {
+      if (!excludeCommentsAndWhitespace && (whitespace?.isNotEmpty ?? false)) {
         ret.add(newToken('whitespace', whitespace));
         whitespace = '';
       }
@@ -95,7 +95,7 @@ late int sign;
 String? c;
 
 // not null;
-Token lex() {
+Token lex({bool excludeCommentsAndWhitespace = true}) {
   lexState = 'default';
   buffer = '';
   doubleQuote = false;
@@ -110,6 +110,10 @@ Token lex() {
 
     final token = lexStates[lexState!]!();
     if (token != null) {
+      if (excludeCommentsAndWhitespace && (token.type == 'singleLineComment' || token.type == 'multiLineComment')) {
+        buffer = '';
+        continue;
+      }
       return token;
     }
   }
